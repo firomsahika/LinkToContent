@@ -1,4 +1,4 @@
-"use client"
+"use client";
 
 import React, { useState } from 'react';
 import Sidebar from '../components/Sidebar';
@@ -10,13 +10,18 @@ import TeamView from '../components/TeamView';
 import BillingView from '../components/BillingView';
 import SettingsView from '../components/SettingsView';
 import DocsView from '../components/DocsView';
-import { AppStatus, ContentType, GenerationSettings} from "../../types"
+import { AppStatus, ContentType, GenerationSettings } from "../../types";
 
 export type PageView = 'dashboard' | 'history' | 'agents' | 'team' | 'billing' | 'settings' | 'docs';
 
 const App: React.FC = () => {
   const [activePage, setActivePage] = useState<PageView>('dashboard');
   const [status, setStatus] = useState<AppStatus>('idle');
+  
+  // NEW: State for the local file and AI Analysis results
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [aiData, setAiData] = useState<any>(null);
+
   const [selectedTypes, setSelectedTypes] = useState<ContentType[]>(['tiktok_shorts', 'linkedin_posts']);
   const [settings, setSettings] = useState<GenerationSettings>({
     language: 'English',
@@ -28,17 +33,34 @@ const App: React.FC = () => {
     clipLength: '60s'
   });
 
-  const handleGenerate = async (url: string) => {
-    if (!url) return;
+  // Updated handler to receive the File object
+  const handleGenerate = async (file: File) => {
+    if (!file) return;
+    setVideoFile(file);
     setStatus('analyzing');
     
-    // Simulate AI workflow
-    setTimeout(() => {
-      setStatus('generating');
-      setTimeout(() => {
-        setStatus('completed');
-      }, 3000);
-    }, 2000);
+    try {
+      // Step 1: Create FormData to send the file to your Next.js API
+      const formData = new FormData();
+      formData.append('video', file);
+
+      // Step 2: Call your API (which will handle transcription and Groq logic)
+      const response = await fetch('/api/process-video', {
+        method: 'POST',
+        body: formData, // Sending the actual file now!
+      });
+
+      if (!response.ok) throw new Error("Processing failed");
+
+      const data = await response.json();
+      
+      // Step 3: Update state with AI results
+      setAiData(data);
+      setStatus('completed');
+    } catch (error) {
+      console.error("Error during generation:", error);
+      setStatus('idle');
+    }
   };
 
   const renderContent = () => {
@@ -53,28 +75,27 @@ const App: React.FC = () => {
                 setSelectedTypes={setSelectedTypes}
                 settings={settings}
                 setSettings={setSettings}
-                onGenerate={handleGenerate}
+                onGenerate={handleGenerate} // Now receives a File
               />
             </div>
             <div className="flex-1 bg-slate-50 flex flex-col h-full overflow-hidden">
-              <OutputPanel status={status} selectedTypes={selectedTypes} />
+              {/* Pass the video file and aiData to OutputPanel for Phase 2 snipping */}
+              <OutputPanel 
+                status={status} 
+                selectedTypes={selectedTypes} 
+                videoFile={videoFile} 
+                aiData={aiData}
+              />
             </div>
           </main>
         );
-      case 'history':
-        return <HistoryView />;
-      case 'agents':
-        return <AgentsView />;
-      case 'team':
-        return <TeamView />;
-      case 'billing':
-        return <BillingView />;
-      case 'settings':
-        return <SettingsView />;
-      case 'docs':
-        return <DocsView />;
-      default:
-        return null;
+      case 'history': return <HistoryView />;
+      case 'agents': return <AgentsView />;
+      case 'team': return <TeamView />;
+      case 'billing': return <BillingView />;
+      case 'settings': return <SettingsView />;
+      case 'docs': return <DocsView />;
+      default: return null;
     }
   };
 
